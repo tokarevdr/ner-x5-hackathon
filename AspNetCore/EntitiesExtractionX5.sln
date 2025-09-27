@@ -1,0 +1,38 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Api", "Api\Api.csproj", "{4C9910D1-45E0-4218-8782-183E36A01D0F}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EntitiesExtractionX5.AppHost", "EntitiesExtractionX5.AppHost\EntitiesExtractionX5.AppHost.csproj", "{FAC8CA3A-EB4D-4A3F-846A-63423325FF43}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EntitiesExtractionX5.ServiceDefaults", "EntitiesExtractionX5.ServiceDefaults\EntitiesExtractionX5.ServiceDefaults.csproj", "{25A67899-5FC7-451D-B836-3A8DEFD407DA}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "SolutionItems", "SolutionItems", "{33B0EC54-5251-4A8A-9A37-872D54C2FDE3}"
+	ProjectSection(SolutionItems) = preProject
+		Directrory.Build.props = Directrory.Build.props
+		docker-compose.Local.yml = docker-compose.Local.yml
+		.dockerignore = .dockerignore
+		.gitignore = .gitignore
+		EntitiesExtractionX5.sln.DotSettings.user = EntitiesExtractionX5.sln.DotSettings.user
+		.gitattributes = .gitattributes
+	EndProjectSection
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{4C9910D1-45E0-4218-8782-183E36A01D0F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4C9910D1-45E0-4218-8782-183E36A01D0F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4C9910D1-45E0-4218-8782-183E36A01D0F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4C9910D1-45E0-4218-8782-183E36A01D0F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{FAC8CA3A-EB4D-4A3F-846A-63423325FF43}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{FAC8CA3A-EB4D-4A3F-846A-63423325FF43}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{FAC8CA3A-EB4D-4A3F-846A-63423325FF43}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{FAC8CA3A-EB4D-4A3F-846A-63423325FF43}.Release|Any CPU.Build.0 = Release|Any CPU
+		{25A67899-5FC7-451D-B836-3A8DEFD407DA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{25A67899-5FC7-451D-B836-3A8DEFD407DA}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{25A67899-5FC7-451D-B836-3A8DEFD407DA}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{25A67899-5FC7-451D-B836-3A8DEFD407DA}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal

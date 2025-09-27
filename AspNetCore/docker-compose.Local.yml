@@ -1,0 +1,34 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: ./Api/Dockerfile
+    environment:
+      ASPNETCORE_HTTP_PORTS: "5067"
+      
+      OTEL_DOTNET_EXPERIMENTAL_OTLP_EMIT_EXCEPTION_LOG_ATTRIBUTES: "true"
+      OTEL_DOTNET_EXPERIMENTAL_OTLP_EMIT_EVENT_LOG_ATTRIBUTES: "true"
+      OTEL_DOTNET_EXPERIMENTAL_OTLP_RETRY: "in_memory"
+      ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://docker-dashboard:18889"
+      OTEL_EXPORTER_OTLP_PROTOCOL: "grpc"
+      OTEL_SERVICE_NAME: "api"
+    ports:
+      - "5067:5067"
+    networks:
+      - "aspire"
+  
+  docker-dashboard:
+    image: "mcr.microsoft.com/dotnet/nightly/aspire-dashboard:latest"
+    expose:
+      - "18888"
+      - "18889"
+    ports:
+      - "18888:18888"
+    networks:
+      - "aspire"
+    restart: "always"
+    
+networks:
+  aspire:
+    driver: "bridge"

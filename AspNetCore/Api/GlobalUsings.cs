@@ -1,0 +1,1 @@
+global using PredictionResponse = System.Collections.Generic.IEnumerable<PredictionItem>;
