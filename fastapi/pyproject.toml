@@ -1,0 +1,12 @@
+[project]
+name = "entities-extraction-x5"
+version = "0.1.0"
+description = ""
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "aioredis>=2.0.1",
+    "fastapi[standard]>=0.117.1",
+    "pymorphy3>=2.0.4",
+    "spacy>=3.8.7",
+]
