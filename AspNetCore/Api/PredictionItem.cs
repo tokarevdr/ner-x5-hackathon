@@ -1,0 +1,1 @@
+public sealed record PredictionItem(long StartIndex, long EndIndex, string Entity);
