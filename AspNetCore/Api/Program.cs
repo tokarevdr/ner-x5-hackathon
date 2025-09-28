@@ -44,9 +44,10 @@ builder.Services.AddSingleton(sp => sp.GetRequiredService<IPythonEnvironment>().
 
 builder.AddServiceDefaults();
 
-builder.Services.AddSingleton<JsonSerializerOptions>(new JsonSerializerOptions()
+builder.Services.ConfigureHttpJsonOptions(options =>
 {
-    DictionaryKeyPolicy = JsonNamingPolicy.SnakeCaseLower
+    options.SerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower;
+    options.SerializerOptions.PropertyNameCaseInsensitive = true;
 });
 
 var app = builder.Build();
