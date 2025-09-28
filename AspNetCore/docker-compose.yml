@@ -2,7 +2,7 @@ services:
   api:
     build:
       context: ..
-      dockerfile: ./AspNetCore/Api/Dockerfile
+      dockerfile: ./AspNetCore/Dockerfile
     environment:
       ASPNETCORE_HTTP_PORTS: "5067"
       

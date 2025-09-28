@@ -19,12 +19,6 @@
     </ItemGroup>
 
     <ItemGroup>
-      <Content Include="..\.dockerignore">
-        <Link>.dockerignore</Link>
-      </Content>
-    </ItemGroup>
-
-    <ItemGroup>
       <ProjectReference Include="..\EntitiesExtractionX5.ServiceDefaults\EntitiesExtractionX5.ServiceDefaults.csproj" />
     </ItemGroup>
     

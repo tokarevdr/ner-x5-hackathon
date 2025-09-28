@@ -9,11 +9,12 @@ EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "SolutionItems", "SolutionItems", "{33B0EC54-5251-4A8A-9A37-872D54C2FDE3}"
 	ProjectSection(SolutionItems) = preProject
 		Directrory.Build.props = Directrory.Build.props
-		docker-compose.Local.yml = docker-compose.Local.yml
+		docker-compose.yml = docker-compose.yml
 		.dockerignore = .dockerignore
 		.gitignore = .gitignore
 		EntitiesExtractionX5.sln.DotSettings.user = EntitiesExtractionX5.sln.DotSettings.user
 		.gitattributes = .gitattributes
+		Dockerfile = Dockerfile
 	EndProjectSection
 EndProject
 Global
