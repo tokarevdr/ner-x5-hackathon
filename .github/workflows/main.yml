@@ -1,0 +1,69 @@
+name: Main CI/CD Pipeline
+
+on:
+  workflow_dispatch:
+    inputs:
+      application:
+        type: choice
+        description: 'Select application'
+        options:
+          - fastapi
+          - AspNetCore
+          - both
+      action:
+        type: choice
+        description: 'Select action'
+        options:
+          - build-only
+          - deploy-only
+          - build-and-deploy
+
+jobs:
+  orchestrate:
+    runs-on: ubuntu-latest
+    outputs:
+      fastapi-build: ${{ steps.set-outputs.outputs.fastapi-build }}
+      aspnet-build: ${{ steps.set-outputs.outputs.aspnet-build }}
+      fastapi-deploy: ${{ steps.set-outputs.outputs.fastapi-deploy }}
+      aspnet-deploy: ${{ steps.set-outputs.outputs.aspnet-deploy }}
+    steps:
+      - name: Determine actions
+        id: set-outputs
+        run: |
+          # Логика определения какие jobs запускать
+          echo "fastapi-build=${{ inputs.action == 'build-only' && inputs.application != 'AspNetCore' || inputs.action == 'build-and-deploy' && inputs.application != 'AspNetCore' }}" >> $GITHUB_OUTPUT
+          echo "aspnet-build=${{ inputs.action == 'build-only' && inputs.application != 'fastapi' || inputs.action == 'build-and-deploy' && inputs.application != 'fastapi' }}" >> $GITHUB_OUTPUT
+          echo "fastapi-deploy=${{ inputs.action == 'deploy-only' && inputs.application != 'AspNetCore' || inputs.action == 'build-and-deploy' && inputs.application != 'AspNetCore' }}" >> $GITHUB_OUTPUT
+          echo "aspnet-deploy=${{ inputs.action == 'deploy-only' && inputs.application != 'fastapi' || inputs.action == 'build-and-deploy' && inputs.application != 'fastapi' }}" >> $GITHUB_OUTPUT
+
+  fastapi-build:
+    needs: orchestrate
+    if: needs.orchestrate.outputs.fastapi-build == 'true'
+    uses: ./.github/workflows/build.yml
+    with:
+      application: fastapi
+    secrets: inherit
+
+  aspnet-build:
+    needs: orchestrate
+    if: needs.orchestrate.outputs.aspnet-build == 'true'
+    uses: ./.github/workflows/build.yml
+    with:
+      application: AspNetCore
+    secrets: inherit
+
+  fastapi-deploy:
+    needs: [orchestrate, fastapi-build]
+    if: needs.orchestrate.outputs.fastapi-deploy == 'true'
+    uses: ./.github/workflows/deploy.yml
+    with:
+      application: fastapi
+    secrets: inherit
+
+  aspnet-deploy:
+    needs: [orchestrate, aspnet-build]
+    if: needs.orchestrate.outputs.aspnet-deploy == 'true'
+    uses: ./.github/workflows/deploy.yml
+    with:
+      application: AspNetCore
+    secrets: inherit

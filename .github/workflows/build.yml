@@ -1,0 +1,27 @@
+name: Build Application
+
+on:
+  workflow_call:
+    inputs:
+      application:
+        type: string
+        required: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        name: Checkout with lfs
+        with:
+          lfs: true
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ${{ inputs.application }}/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}/${{ inputs.application }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

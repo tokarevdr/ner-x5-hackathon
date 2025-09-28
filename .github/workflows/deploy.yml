@@ -1,0 +1,34 @@
+name: Deploy Application
+
+on:
+  workflow_call:
+    inputs:
+      application:
+        type: string
+        required: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Copy files to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          port: ${{ secrets.SSH_PORT }}
+          source: "${{ inputs.application }}/docker-compose.yaml"
+          target: "~/Applications/ner-x5/${{ inputs.application }}"
+          
+      - name: Deploy to Windows Server via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          port: ${{ secrets.SSH_PORT }}
+          script: |
+            bash -lc "cd Applications/ner-x5/${{ inputs.application }} && docker compose pull && docker compose down && docker compose up -d --remove-orphans && docker compose ps -a"
