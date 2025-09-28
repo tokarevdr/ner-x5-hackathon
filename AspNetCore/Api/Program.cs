@@ -7,10 +7,31 @@ var builder = WebApplication.CreateBuilder(args);
 // builder.Services.AddLogging();
 builder.Logging.AddFilter("CSnakes", LogLevel.Information);
 builder.Services.AddOpenApi();
+string home;
+string modelPath;
 
-var home = Path.Join(builder.Environment.ContentRootPath, "python");
+if (builder.Environment.IsDevelopment())
+{
+    home = Path.Join(
+        builder.Environment.ContentRootPath,
+        "..", "..", 
+        "ModelIntegration", 
+        "python");
+    
+    modelPath = Path.Join(
+        builder.Environment.ContentRootPath,
+        "..", "..", 
+        "ModelIntegration", 
+        "model");
+} 
+else
+{
+    home = Path.Join(builder.Environment.ContentRootPath, "python");
+    modelPath = Path.Join(builder.Environment.ContentRootPath, "model");
+}
+// var home = Path.Join(builder.Environment.ContentRootPath, "python");
 var venv = Path.Join(home, "venv");
-var modelPath = Path.Join(builder.Environment.ContentRootPath, "model");
+// var modelPath = Path.Join(builder.Environment.ContentRootPath, "model");
 builder.Services.WithPython()
     .WithHome(home)
     .WithVirtualEnvironment(venv)

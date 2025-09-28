@@ -32,13 +32,17 @@
     </ItemGroup>
     
     <ItemGroup>
-        <AdditionalFiles Include="python\*.py">
+        <AdditionalFiles Include="..\..\ModelIntegration\python\model.py">
+            <Link>python\model.py</Link>
             <SourceItemType>Python</SourceItemType>
             <CopyToOutputDirectory>Always</CopyToOutputDirectory>
         </AdditionalFiles>
-        <None Update="python\requirements.txt">
+        <Content Include="..\..\ModelIntegration\python\requirements.txt">
+            <Link>python\requirements.txt</Link>
             <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-        </None>
+        </Content>
+<!--        <AdditionalFiles Remove="python\**" />-->
+<!--        <None Remove="python\**" />-->
     </ItemGroup>
 
     <PropertyGroup>
@@ -46,9 +50,11 @@
     </PropertyGroup>
     
     <ItemGroup>
-        <Content Include="model/**">
+        <Content Include="..\..\ModelIntegration\model\**">
+            <Link>model\%(RecursiveDir)%(FileName)%(Extension)</Link>
             <CopyToOutputDirectory>Always</CopyToOutputDirectory>
         </Content>
     </ItemGroup>
+    
 
 </Project>
