@@ -9,16 +9,13 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="Aspire.StackExchange.Redis" Version="9.4.2" />
-        <PackageReference Include="Aspire.StackExchange.Redis.DistributedCaching" Version="9.4.2" />
         <PackageReference Include="CSnakes.Runtime" Version="1.2.1" />
         <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="9.0.9"/>
         <PackageReference Include="Microsoft.Extensions.Caching.Hybrid" Version="9.9.0" />
         <PackageReference Include="Microsoft.Extensions.ML" Version="4.0.2" />
         <PackageReference Include="Microsoft.ML" Version="4.0.2" />
-        <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.22.1" />
         <PackageReference Include="Microsoft.ML.OnnxTransformer" Version="4.0.2" />
-        <PackageReference Include="Scalar.AspNetCore" Version="2.8.5" />
+        <PackageReference Include="Scalar.AspNetCore" Version="2.8.7" />
     </ItemGroup>
 
     <ItemGroup>
