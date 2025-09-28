@@ -1,8 +1,7 @@
-    version: '3.8'
-    services:
-      fastapi_app:
-        build: 
-          context: .
-          dockerfile: DOCKERFILE # Path to your FastAPI application directory
-        ports:
-          - "8000:8000"
+  services:
+    fastapi_app:
+      build:
+        context: ..
+        dockerfile: fastapi/Dockerfile # Path to your FastAPI application directory
+      ports:
+      - "5067:8000"

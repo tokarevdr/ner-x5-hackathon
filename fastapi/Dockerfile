@@ -10,6 +10,7 @@
     # Ref: https://docs.astral.sh/uv/guides/integration/docker/#using-the-environment
     ENV PATH="/app/.venv/bin:$PATH"
 
+    ENV CONFIGURATION=Release
     # Compile bytecode
     # Ref: https://docs.astral.sh/uv/guides/integration/docker/#compiling-bytecode
     ENV UV_COMPILE_BYTECODE=1
@@ -21,15 +22,15 @@
     # Install dependencies
     # Ref: https://docs.astral.sh/uv/guides/integration/docker/#intermediate-layers
     RUN --mount=type=cache,target=/root/.cache/uv \
-        --mount=type=bind,source=uv.lock,target=uv.lock \
-        --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
+        --mount=type=bind,source=fastapi/uv.lock,target=uv.lock \
+        --mount=type=bind,source=fastapi/pyproject.toml,target=pyproject.toml \
         uv sync --frozen --no-install-project
 
     ENV PYTHONPATH=/app
 
-    COPY ./pyproject.toml ./uv.lock /app/
-
-    COPY ./app /app/app
+    COPY fastapi/pyproject.toml fastapi/uv.lock /app/
+    COPY ModelIntegration/model /app/app/model
+    COPY fastapi/app /app/app
 
     # Sync the project
     # Ref: https://docs.astral.sh/uv/guides/integration/docker/#intermediate-layers

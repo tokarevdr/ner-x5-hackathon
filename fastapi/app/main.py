@@ -1,12 +1,17 @@
 from fastapi import FastAPI
 import os
 
+
 from app.models import NerRequest, NerResult
 from app.nermodel import NerModel, SpacyNerModel
 
 script_directory = os.path.dirname(os.path.abspath(__file__))
-model_path = script_directory + "/nermodels/custom_ru_core_news_lg_with_9_labels_50_epochs"
+configuration = os.getenv("CONFIGURATION")
 
+if configuration == "Development":
+    script_directory = os.path.join(script_directory, os.path.pardir, os.path.pardir, "ModelIntegration")
+
+model_path = os.path.join(script_directory, 'model')
 app = FastAPI()
 model: NerModel = SpacyNerModel(model_path)
 
