@@ -124,11 +124,6 @@ def calculate_macro_f1(entity_pairs, max_processing_time=1.0):
         metrics = calculate_ner_metrics(pair[0], pair[1])
         results.append(metrics)
 
-        # # Вывод метрик TP/FP/FN для каждой пары
-        # print(f"Metrics for pair {i}:")
-        # for entity_type in entity_types:
-        #     print(f"  {entity_type}: TP={metrics[entity_type]['TP']}, FP={metrics[entity_type]['FP']}, FN={metrics[entity_type]['FN']}")
-
     # Aggregate TP, FP, FN across all pairs
     for metrics in results:
         for entity_type in entity_types:
@@ -156,9 +151,6 @@ def calculate_macro_f1(entity_pairs, max_processing_time=1.0):
 
         # Store F1 for this entity type
         f1_per_entity[entity_type] = f1
-
-        # Вывод Precision, Recall, F1 для каждого типа
-        # print(f"{entity_type}: Precision={precision:.4f}, Recall={recall:.4f}, F1={f1:.4f}")
 
         # Добавляем F1 в список только для типов, где есть хотя бы одна сущность (TP+FP+FN > 0)
         if tp + fp + fn > 0:
@@ -220,8 +212,6 @@ def process_submission(trained_model, input_file='submission.csv', output_file='
         # Прогоняем текст через модель
         doc = trained_model(text)
 
-
-
         # Извлекаем сущности в нужном формате
         entities = [(ent.start_char, ent.end_char, ent.label_) for ent in doc.ents]
 
@@ -236,5 +226,27 @@ def process_submission(trained_model, input_file='submission.csv', output_file='
     # Сохраняем в CSV с правильным форматом
     output_df.to_csv(output_file, sep=';', index=False)
 
-# Пример использования:
-# process_submission(trained_model)
+class HFWrapper:
+    def __init__(self, model, tokenizer):
+        self.model = model
+        self.tokenizer = tokenizer
+
+    def __call__(self, text):
+        class Doc:
+            def __init__(self, ents):
+                self.ents = ents
+
+        class Ent:
+            def __init__(self, start, end, label):
+                self.start_char = start
+                self.end_char = end
+                self.label_ = label
+
+        tokenized = self.tokenizer([text], padding=True, truncation=True, return_tensors="pt", return_offsets_mapping=True)
+        input_ids = tokenized["input_ids"].to(self.model.bert.device)
+        attention_mask = tokenized["attention_mask"].to(self.model.bert.device)
+        with torch.no_grad():
+            pred = self.model(input_ids, attention_mask)[0]
+        spans = bio_to_spans(text, pred, tokenized["offset_mapping"][0].tolist())
+        ents = [Ent(s, e, l) for s, e, l in spans]
+        return Doc(ents)
