@@ -149,11 +149,238 @@ def process_submission(trained_model, input_file='submission.csv', output_file='
     })
     output_df.to_csv(output_file, sep=';', index=False)
 
+def parse_span_str(span_str):
+    """
+    Парсит строковое представление спанов, например:
+    "[(0, 4, 'B-TYPE'), (5, 12, 'I-TYPE')]"
+    Возвращает list of tuples (int,int,str).
+    """
+    if isinstance(span_str, (list, tuple)):
+        return span_str
+    if not span_str or not isinstance(span_str, str):
+        return []
+    try:
+        parsed = ast.literal_eval(span_str)
+        # ensure ints
+        out = []
+        for s in parsed:
+            if len(s) >= 3:
+                out.append((int(s[0]), int(s[1]), str(s[2])))
+        return out
+    except Exception as e:
+        raise ValueError(f"Can't parse span string: {e}")
+
+def merge_prefixed_char_spans(spans):
+    """
+    Вход: spans - list of (start,end,label) где label может быть:
+      - 'B-TYPE', 'I-TYPE', 'O' или просто 'TYPE' (robust)
+    Возвращает список объединённых базовых спанов:
+      [(start,end,'TYPE'), ...] или [(start,end,'O'), ...]
+    Правило объединения: последовательности B-/I- с одинаковым типом и
+    прилегающими границами (next.start == cur.end) объединяются.
+    O-спаны объединяются только если непрерывны (смежны).
+    """
+    if not spans:
+        return []
+    # sort by start
+    spans_sorted = sorted(spans, key=lambda x: int(x[0]))
+    merged = []
+    i = 0
+    n = len(spans_sorted)
+    while i < n:
+        s0, s1, lab = spans_sorted[i]
+        s0 = int(s0); s1 = int(s1)
+        if lab == 'O':
+            cur_s, cur_e = s0, s1
+            j = i + 1
+            while j < n and spans_sorted[j][2] == 'O' and int(spans_sorted[j][0]) == cur_e:
+                cur_e = int(spans_sorted[j][1]); j += 1
+            merged.append((cur_s, cur_e, 'O'))
+            i = j
+            continue
+
+        # handle labels with B- or I- or plain
+        if isinstance(lab, str) and (lab.startswith('B-') or lab.startswith('I-')):
+            base = lab.split('-', 1)[1]
+        else:
+            base = lab  # already base
+        # start new span at s0..s1
+        cur_s, cur_e = s0, s1
+        j = i + 1
+        while j < n:
+            ns0, ns1, nlab = spans_sorted[j]
+            ns0 = int(ns0); ns1 = int(ns1)
+            # accept continuation if it's I-base and contiguous, or plain base contiguous
+            if (isinstance(nlab, str) and nlab.startswith('I-') and nlab.split('-',1)[1] == base and ns0 == cur_e) \
+               or (nlab == base and ns0 == cur_e):
+                cur_e = ns1
+                j += 1
+            else:
+                break
+        merged.append((cur_s, cur_e, base))
+        i = j
+    return merged
+
+
+def tokenize_and_align_labels(text, spans_prefixed, tokenizer, add_special_tokens=True, truncation=True, max_length=None):
+    """
+    text: str
+    spans_prefixed: list of (start,end,label) where label may be 'B-TYPE','I-TYPE','O'
+    tokenizer: HuggingFace tokenizer with use_fast=True (must provide offset_mapping)
+    Возвращает dict:
+      {
+        'tokens': [...],
+        'input_ids': [...],
+        'offsets': [(s,e), ...],
+        'token_labels': ['B-TYPE','I-TYPE','O', ...]   # BIO per token
+      }
+    Логика:
+      1) Сначала объединяем префиксные char-спаны в базовые entity spans (merge_prefixed_char_spans)
+      2) Для каждого токена находим span с максимальным overlap. Если overlap==0 => 'O'
+      3) Помечаем токен как B-<TYPE>, если токен содержит начало span (t_start <= span_start < t_end),
+         иначе как I-<TYPE> (если частично или полностью внутри).
+    """
+    # 1) merge char spans to base spans
+    merged_spans = merge_prefixed_char_spans(spans_prefixed)
+
+    enc = tokenizer(
+        text,
+        return_offsets_mapping=True,
+        add_special_tokens=add_special_tokens,
+        truncation=truncation,
+        max_length=max_length
+    )
+    offsets = enc["offset_mapping"]
+    input_ids = enc["input_ids"]
+    tokens = tokenizer.convert_ids_to_tokens(input_ids)
+
+    token_labels = []
+    for (t_start, t_end) in offsets:
+        if t_start == t_end:
+            # special token ([CLS],[SEP]) — пометим 'O' (для обучения можете заменить на -100)
+            token_labels.append("O")
+            continue
+
+        best_span = None
+        best_overlap = 0
+        for (s_start, s_end, s_lab) in merged_spans:
+            # s_lab is base label or 'O'
+            overlap = min(t_end, s_end) - max(t_start, s_start)
+            if overlap > best_overlap:
+                best_overlap = overlap
+                best_span = (s_start, s_end, s_lab)
+
+        if best_span is None or best_overlap <= 0:
+            token_labels.append("O")
+        else:
+            s_start, s_end, s_lab = best_span
+            if s_lab == 'O':
+                token_labels.append("O")
+            else:
+                # decide B vs I:
+                if t_start <= s_start < t_end:
+                    token_labels.append("B-" + s_lab)
+                elif s_start <= t_start < s_end:
+                    token_labels.append("I-" + s_lab)
+                else:
+                    # fallback
+                    token_labels.append("I-" + s_lab)
+
+    return {
+        "tokens": tokens,
+        "input_ids": input_ids,
+        "offsets": offsets,
+        "token_labels": token_labels,
+    }
+
+
+def token_labels_to_char_spans(offsets, token_labels):
+    """
+    offsets: list of (start,end)
+    token_labels: list like ['B-BRAND','I-BRAND','O',...]
+    Возвращает список char-spans в формате:
+       [(start,end,'B-BRAND'), ..., (start,end,'O'), ...]
+    Правила:
+      - Non-O spans возвращаются как единственный B-<TYPE> спан (начало => 'B-', внутри => объединяется)
+      - O-спаны возвращаются как 'O'
+      - Объединяем токены в один char-span только если смежны (next.start == cur.end).
+    """
+    spans = []
+    cur = None  # [start, end, base_label or 'O']
+    for (off, lab) in zip(offsets, token_labels):
+        t_s, t_e = off
+        if t_s == t_e:
+            # skip special tokens
+            continue
+        if lab == "O":
+            if cur is None:
+                cur = [t_s, t_e, "O"]
+            else:
+                if cur[2] == "O" and t_s == cur[1]:
+                    # extend contiguous O span
+                    cur[1] = t_e
+                else:
+                    # push previous and start new O span
+                    spans.append((cur[0], cur[1], "B-" + cur[2] if cur[2] != "O" else "O") if cur[2] != "O" else (cur[0], cur[1], "O"))
+                    cur = [t_s, t_e, "O"]
+        else:
+            # labels like B-X or I-X (robust to plain X)
+            if lab.startswith("B-"):
+                base = lab.split("-", 1)[1]
+                if cur is not None:
+                    # push previous
+                    spans.append((cur[0], cur[1], "B-" + cur[2] if cur[2] != "O" else "O") if cur[2] != "O" else (cur[0], cur[1], "O"))
+                cur = [t_s, t_e, base]
+            elif lab.startswith("I-"):
+                base = lab.split("-", 1)[1]
+                if cur is not None and cur[2] == base and t_s == cur[1]:
+                    cur[1] = t_e
+                else:
+                    # I- without B- : начинаем новый span (robust)
+                    if cur is not None:
+                        spans.append((cur[0], cur[1], "B-" + cur[2] if cur[2] != "O" else "O") if cur[2] != "O" else (cur[0], cur[1], "O"))
+                    cur = [t_s, t_e, base]
+            else:
+                # plain label like 'TYPE' -> treat as B-<TYPE>
+                base = lab
+                if cur is not None:
+                    spans.append((cur[0], cur[1], "B-" + cur[2] if cur[2] != "O" else "O") if cur[2] != "O" else (cur[0], cur[1], "O"))
+                cur = [t_s, t_e, base]
+
+    if cur is not None:
+        if cur[2] == "O":
+            spans.append((cur[0], cur[1], "O"))
+        else:
+            spans.append((cur[0], cur[1], "B-" + cur[2]))
+    return spans
+
+
+def build_label_maps_from_examples(all_prefixed_spans):
+    """
+    all_prefixed_spans: iterable of spans-lists (raw from CSV)
+    Возвращает label2id, id2label covering all 'B-X','I-X' and 'O'.
+    """
+    bases = set()
+    for spans in all_prefixed_spans:
+        merged = merge_prefixed_char_spans(spans)
+        for s,e,lab in merged:
+            if lab == 'O':
+                continue
+            bases.add(lab)
+    labels = ["O"]
+    for b in sorted(bases):
+        labels.append("B-" + b)
+        labels.append("I-" + b)
+    label2id = {lab: i for i, lab in enumerate(labels)}
+    id2label = {i: lab for lab, i in label2id.items()}
+    return label2id, id2label
+
 
 class HFWrapper:
-    def __init__(self, model, tokenizer):
+    def __init__(self, model, tokenizer, id2label):
         self.model = model
         self.tokenizer = tokenizer
+        self.id2label = id2label  # Добавляем id2label для преобразования ID в метки
 
     def __call__(self, text):
         class Doc:
@@ -166,13 +393,29 @@ class HFWrapper:
                 self.end_char = end
                 self.label_ = label
 
-        tokenized = self.tokenizer([text], padding=True, truncation=True, return_tensors="pt",
-                                   return_offsets_mapping=True)
+        # Токенизация с truncation и max_length (из CONFIG)
+        tokenized = self.tokenizer(
+            [text],
+            padding=True,
+            truncation=True,
+            max_length=128,  # Из CONFIG["max_length"]
+            return_tensors="pt",
+            return_offsets_mapping=True
+        )
         input_ids = tokenized["input_ids"].to(self.model.bert.device)
         attention_mask = tokenized["attention_mask"].to(self.model.bert.device)
+
+        # Инференс модели
         with torch.no_grad():
-            pred = self.model(input_ids, attention_mask)[0]
-        spans = bio_to_spans(text, pred, tokenized["offset_mapping"][0].tolist())
+            pred = self.model(input_ids, attention_mask)[0]  # Список ID меток от viterbi_decode
+
+        # Преобразуем ID меток в текстовые метки
+        token_labels = [self.id2label[id] for id in pred]
+
+        # Конвертируем в спаны с помощью token_labels_to_char_spans
+        spans = token_labels_to_char_spans(tokenized["offset_mapping"][0].tolist(), token_labels)
+
+        # Создаём entities
         ents = [Ent(s, e, l) for s, e, l in spans]
         return Doc(ents)
 
@@ -306,14 +549,30 @@ try:
             self.crf = CRF(num_labels)
             self.model_checkpoint = model_checkpoint
 
+        # В файле module.py, внутри класса NERModelWithCRF, метод forward
+
         def forward(self, input_ids, attention_mask, labels=None):
             outputs = self.bert(input_ids, attention_mask=attention_mask)
             emissions = outputs.logits
+
             if labels is not None:
-                loss = -self.crf(emissions, labels, mask=attention_mask.type(torch.uint8))
+                # print(labels.min(), labels.max())  # Закомментировано, как у вас
+
+                # Клонирование и замена -100 на 0
+                labels_crf = labels.clone()
+                labels_crf[labels == -100] = 0  # 0 - индекс для "O"
+
+                loss = -self.crf(emissions, labels_crf, mask=attention_mask.type(torch.uint8))
                 return loss
             else:
-                return self.crf.decode(emissions, mask=attention_mask.type(torch.uint8))
+                # Замена decode на viterbi_decode
+                return self.crf.viterbi_decode(emissions, mask=attention_mask.type(torch.uint8))
+
+        def get_emissions(self, input_ids, attention_mask):
+            """Дополнительный метод для получения emissions"""
+            with torch.no_grad():
+                outputs = self.bert(input_ids, attention_mask=attention_mask)
+                return outputs.logits
 
         def save_pretrained(self, save_directory):
             self.bert.save_pretrained(save_directory)
@@ -474,38 +733,5 @@ def process_submission_bert(model, tokenizer, input_file='submission.csv', outpu
     print(f"✅ Результаты сохранены в: {output_file}")
     print(f"📊 Обработано примеров: {len(results)}")
 
-
-def bio_to_spans(text, bio_labels, offsets):
-    entities = []
-    current_entity = None
-
-    for i, (label_id, (start, end)) in enumerate(zip(bio_labels, offsets)):
-        if start == end:
-            continue
-
-        label = "O"
-        if label == "O":
-            if current_entity is not None:
-                entities.append(current_entity)
-                current_entity = None
-            continue
-
-        if label.startswith("B-"):
-            if current_entity is not None:
-                entities.append(current_entity)
-            entity_type = label[2:]
-            current_entity = (start, end, entity_type)
-        elif label.startswith("I-"):
-            entity_type = label[2:]
-            if current_entity is not None and current_entity[2] == entity_type:
-                current_entity = (current_entity[0], end, entity_type)
-            else:
-                if current_entity is not None:
-                    entities.append(current_entity)
-                current_entity = (start, end, entity_type)
-
-    if current_entity is not None:
-        entities.append(current_entity)
-    return entities
 
 
