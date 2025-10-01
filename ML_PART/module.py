@@ -711,8 +711,8 @@ def load_bert_from_hf(repo_name, token=None, device=None):
         return None, None, None
 
 
-def process_submission_bert(model, tokenizer, input_file='submission.csv', output_file='submission_response_bert.csv'):
-    bert_wrapper = HFWrapper(model, tokenizer)
+def process_submission_bert(model, tokenizer, input_file='submission.csv', output_file='submission_response_bert.csv', id2label=None):
+    bert_wrapper = HFWrapper(model, tokenizer, id2label=id2label)
     df = pd.read_csv(input_file, sep=';')
     results = []
 
