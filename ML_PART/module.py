@@ -5,6 +5,162 @@
 import os
 import torch
 import pandas as pd
+import ast
+import tempfile
+import json
+import numpy as np
+from typing import List, Union, Tuple, Dict, Any
+
+def save_fold_models_to_hf(models: List[Any], tokenizer_or_nlp: Any, base_repo_name: str, token: str = None, is_spacy: bool = False) -> bool:
+    """
+    Сохраняет модели всех фолдов кросс-валидации в HuggingFace Hub.
+
+    Args:
+        models: Список моделей (spaCy или BERT+CRF).
+        tokenizer_or_nlp: Токенизатор (для BERT) или NLP-объект (для spaCy).
+        base_repo_name: Базовое имя репозитория (к нему добавляется '_foldN').
+        token: HuggingFace токен для авторизации.
+        is_spacy: Если True, сохраняет spaCy-модели, иначе BERT+CRF.
+
+    Returns:
+        bool: True, если сохранение успешно, иначе False.
+    """
+    try:
+        from huggingface_hub import HfApi
+        if not setup_hf_login(token):
+            return False
+
+        api = HfApi()
+        for i, model in enumerate(models, 1):
+            repo_name = f"{base_repo_name}_fold{i}"
+            try:
+                api.repo_info(repo_id=repo_name)
+                print(f"✅ Репозиторий найден: {repo_name}")
+            except Exception:
+                print(f"🆕 Создаем новый репозиторий: {repo_name}")
+                api.create_repo(repo_id=repo_name, private=True)
+
+            with tempfile.TemporaryDirectory() as temp_dir:
+                if is_spacy:
+                    # Сохранение spaCy модели
+                    model.to_disk(temp_dir)
+                    readme_content = f"""---
+language: ru
+license: mit
+tags:
+- named-entity-recognition
+- ner
+- spacy
+- russian
+---
+
+# Модель для извлечения сущностей: {repo_name}
+
+Модель фолда {i} для извлечения сущностей TYPE, BRAND, VOLUME, PERCENT из текстов продуктов.
+
+## Использование
+
+```python
+from module import load_spacy_from_hf
+
+nlp = load_spacy_from_hf("{repo_name}")
+```
+"""
+                else:
+                    # Сохранение BERT+CRF модели
+                    model.save_pretrained(temp_dir)
+                    tokenizer_or_nlp.save_pretrained(temp_dir)
+                    readme_content = f"""---
+language: ru
+license: mit
+tags:
+- named-entity-recognition
+- ner
+- bert
+- crf
+- russian
+---
+
+# Модель для извлечения сущностей: {repo_name}
+
+Модель фолда {i} для извлечения сущностей TYPE, BRAND, VOLUME, PERCENT из текстов продуктов.
+
+## Использование
+
+```python
+from module import load_bert_from_hf
+
+model, tokenizer, config = load_bert_from_hf("{repo_name}")
+```
+"""
+                with open(os.path.join(temp_dir, "README.md"), "w", encoding="utf-8") as f:
+                    f.write(readme_content)
+
+                api.upload_folder(
+                    folder_path=temp_dir,
+                    repo_id=repo_name,
+                    repo_type="model"
+                )
+            print(f"✅ Модель фолда {i} сохранена в HF Hub: {repo_name}")
+        return True
+    except Exception as e:
+        print(f"❌ Ошибка сохранения моделей фолдов: {e}")
+        return False
+
+def ensemble_predict(models: List[Any], tokenizer_or_nlp: Any, text: str, is_spacy: bool = False, id2label: Dict[int, str] = None) -> List[Tuple[int, int, str]]:
+    """
+    Выполняет ансамблевое предсказание для списка моделей.
+
+    Args:
+        models: Список моделей (spaCy или BERT+CRF).
+        tokenizer_or_nlp: Токенизатор (для BERT) или NLP-объект (для spaCy).
+        text: Входной текст для предсказания.
+        is_spacy: Если True, работает с spaCy-моделями, иначе с BERT+CRF.
+        id2label: Словарь для преобразования ID в метки (для BERT).
+
+    Returns:
+        List[Tuple[int, int, str]]: Список спанов [(start, end, label), ...].
+    """
+    if is_spacy:
+        # Ансамбль для spaCy (голосование по сущностям)
+        all_spans = []
+        for model in models:
+            doc = model(text)
+            spans = [(ent.start_char, ent.end_char, ent.label_) for ent in doc.ents]
+            all_spans.append(spans)
+
+        # Простое голосование: выбираем спаны, которые встречаются чаще всего
+        from collections import Counter
+        span_counts = Counter(tuple(span) for spans in all_spans for span in spans)
+        threshold = len(models) / 2  # Порог: половина моделей должна согласиться
+        final_spans = [span for span, count in span_counts.items() if count >= threshold]
+        return sorted(final_spans, key=lambda x: x[0])
+    else:
+        # Ансамбль для BERT+CRF (усреднение логитов)
+        tokenized = tokenizer_or_nlp(
+            [text],
+            padding=True,
+            truncation=True,
+            max_length=128,
+            return_tensors="pt",
+            return_offsets_mapping=True
+        )
+        input_ids = tokenized["input_ids"].to(models[0].bert.device)
+        attention_mask = tokenized["attention_mask"].to(models[0].bert.device)
+        offsets = tokenized["offset_mapping"][0].tolist()
+
+        all_logits = []
+        for model in models:
+            with torch.no_grad():
+                logits = model.get_emissions(input_ids, attention_mask)
+                all_logits.append(logits)
+
+        # Усредняем логиты
+        mean_logits = torch.mean(torch.stack(all_logits), dim=0)
+        pred = models[0].crf.viterbi_decode(mean_logits, mask=attention_mask.type(torch.uint8))[0]
+        token_labels = [id2label[id] for id in pred]
+        spans = token_labels_to_char_spans(offsets, token_labels)
+        return [(s, e, l) for s, e, l in spans if l != "O"]
 
 
 def calculate_ner_metrics(true_entities, pred_entities):
